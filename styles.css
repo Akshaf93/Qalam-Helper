@@ -1,0 +1,190 @@
+/* ATTENDANCE METRICS */
+
+.qh-attendance-metrics {
+    padding: 8px 0;
+    border-top: 1px solid #e5e5e5;
+    margin-top: 8px !important;
+}
+
+.qh-attendance-metrics span {
+    line-height: 1.6;
+}
+
+.qh-attendance-details {
+    border-radius: 4px;
+    border-left: 4px solid #1e87f0;
+}
+
+/* Remove underlines from dashboard and attendance card links */
+.card a,
+.md-card a {
+    text-decoration: none !important;
+}
+
+/* Hide orphaned attendance widget in the outer md-card-content (the one with tabs) */
+.md-card-content:has(.uk-tab) > .qh-attendance-widget {
+    display: none !important;
+}
+
+/* Force results cards to expand to fit content */
+.md-card.qh-results-card {
+    height: auto !important;
+    min-height: 160px !important;
+}
+
+/* GRADEBOOK ENHANCEMENTS*/
+
+.qh-category-metrics {
+    padding-top: 6px;
+    margin-top: 6px !important;
+    border-top: 1px dashed #e5e5e5;
+}
+
+.qh-totals-summary {
+    background: linear-gradient(135deg, #f8f8f8 0%, #ffffff 100%);
+}
+
+.qh-totals-summary td {
+    padding: 20px !important;
+}
+
+.qh-projection-tool {
+    border: 2px dashed #ffc107;
+}
+
+.qh-projection-tool input.uk-input {
+    border: 2px solid #e5e5e5;
+    transition: all 0.3s ease;
+}
+
+.qh-projection-tool input.uk-input:focus {
+    border-color: #1e87f0;
+    box-shadow: 0 0 0 3px rgba(30, 135, 240, 0.1);
+}
+
+.qh-projection-result {
+    animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* UTILITY CLASSES*/
+
+.qh-pulse {
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.7;
+    }
+}
+
+/* Success/Danger text colors */
+.uk-text-success {
+    color: #32d296 !important;
+}
+
+.uk-text-danger {
+    color: #f0506e !important;
+}
+
+.uk-text-warning {
+    color: #faa05a !important;
+}
+
+/* Badge enhancements */
+.uk-badge-danger {
+    background-color: #f0506e;
+}
+
+.uk-badge-warning {
+    background-color: #faa05a;
+}
+
+/* RESPONSIVE ADJUSTMENTS*/
+
+@media (max-width: 768px) {
+    .qh-totals-summary td {
+        padding: 12px !important;
+    }
+    
+    .qh-projection-tool input.uk-input {
+        margin-bottom: 8px;
+    }
+}
+
+/* PROGRESS BAR CUSTOMIZATION*/
+
+.qh-totals-summary .uk-progress {
+    height: 12px;
+    background: #e5e5e5;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.qh-totals-summary .uk-progress-bar {
+    transition: width 0.5s ease;
+    border-radius: 6px;
+}
+
+/* HOVER EFFECTS */
+
+/* Fix hover jitter - remove default UIkit table hover effects */
+.uk-table tbody tr:hover {
+    background: rgba(0, 0, 0, 0.02) !important;
+}
+
+.table-parent-row:hover {
+    background: rgba(0, 0, 0, 0.02) !important;
+}
+
+/* Prevent text resizing on hover */
+.uk-table tbody tr:hover * {
+    transform: none !important;
+    font-size: inherit !important;
+}
+
+/* Remove hover effect from category metrics to prevent jitter */
+.qh-category-metrics {
+    pointer-events: none;
+}
+
+.qh-projection-tool .uk-button-primary {
+    transition: all 0.3s ease;
+}
+
+.qh-projection-tool .uk-button-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(30, 135, 240, 0.3);
+}
+
+/* ACCESSIBILITY */
+
+.qh-attendance-metrics strong,
+.qh-category-metrics strong,
+.qh-totals-summary strong {
+    font-weight: 600;
+}
+
+/* High contrast for important metrics */
+.qh-totals-summary .uk-text-large {
+    font-weight: 700;
+}
+
+/* Focus states for inputs */
+.qh-projection-input:focus {
+    outline: none;
+}
