@@ -2,38 +2,68 @@
 
 const GradebookModule = {
     detectCourseStructure() {
-        // Check if there are Lab/Lecture tabs
-        const tabs = document.querySelectorAll('.uk-tab li');
+        // Check tab dropdown for Lab/Lecture sections (more reliable than checking tabs)
+        const tabDropdownItems = document.querySelectorAll('.uk-tab-responsive .uk-dropdown a');
         let hasLab = false;
         let hasLecture = false;
         
-        tabs.forEach(tab => {
-            const text = tab.textContent.toLowerCase();
-            if (text.includes('lab')) hasLab = true;
-            if (text.includes('lecture')) hasLecture = true;
+        tabDropdownItems.forEach(item => {
+            const text = item.textContent.toLowerCase();
+            if (text.includes('-lab)') || text.includes('lab)')) hasLab = true;
+            if (text.includes('-lecture)') || text.includes('lecture)')) hasLecture = true;
         });
         
-        if (hasLab && hasLecture) {
-            return {
-                hasLab: true,
-                hasLecture: true,
-                lectureWeight: 66.67,
-                labWeight: 33.33
-            };
-        } else if (hasLecture) {
-            return {
-                hasLab: false,
-                hasLecture: true,
-                lectureWeight: 100,
-                labWeight: 0
-            };
+        // Fallback: Check if there are Lab/Lecture tabs (old method)
+        if (!hasLab && !hasLecture) {
+            const tabs = document.querySelectorAll('.uk-tab li');
+            tabs.forEach(tab => {
+                const text = tab.textContent.toLowerCase();
+                if (text.includes('lab')) hasLab = true;
+                if (text.includes('lecture')) hasLecture = true;
+            });
+        }
+        
+        // Try to get credit hours from the page first
+        let creditText = document.body.textContent.match(/Credit Hours?\s*:\s*([\d.]+)/i);
+        let creditHours = creditText ? parseFloat(creditText[1]) : null;
+        
+        // If not found on page, try to get from URL and check ResultsModule cache
+        if (!creditHours) {
+            const urlMatch = window.location.href.match(/\/gradebook\/(\d+)/);
+            if (urlMatch && ResultsModule && ResultsModule.creditHoursCache) {
+                const courseId = urlMatch[1];
+                creditHours = ResultsModule.creditHoursCache[courseId];
+                if (creditHours) {
+                    console.log(`Retrieved credit hours from cache for course ${courseId}: ${creditHours} credits`);
+                }
+            }
+        }
+        
+        let lectureWeight, labWeight;
+        
+        if (hasLab && hasLecture && creditHours) {
+            // Use credit hours to determine split (Lab is always 1 credit)
+            const lectureCreditHours = creditHours - 1;
+            lectureWeight = (lectureCreditHours / creditHours) * 100;
+            labWeight = (1 / creditHours) * 100;
+            
+            console.log(`Gradebook: ${creditHours} credits detected → Lecture: ${lectureWeight.toFixed(2)}%, Lab: ${labWeight.toFixed(2)}%`);
+        } else if (hasLab && hasLecture) {
+            // Fallback to standard 2+1 split
+            lectureWeight = 66.67;
+            labWeight = 33.33;
+            console.log(`Gradebook: Credit hours not found, using default 2+1 split`);
+        } else {
+            // Pure lecture
+            lectureWeight = 100;
+            labWeight = 0;
         }
         
         return {
-            hasLab: false,
-            hasLecture: true,
-            lectureWeight: 100,
-            labWeight: 0
+            hasLab,
+            hasLecture,
+            lectureWeight,
+            labWeight
         };
     },
 

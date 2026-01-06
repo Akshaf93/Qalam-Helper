@@ -1,12 +1,94 @@
 //ResultsModule - handles results data extraction and dashboard injection
 
 const ResultsModule = {
+    // Store credit hours for courses (courseId -> creditHours)
+    creditHoursCache: {},
+
+    // Load cache from localStorage
+    loadCreditHoursCache() {
+        try {
+            const stored = localStorage.getItem('qh_credit_hours');
+            if (stored) {
+                this.creditHoursCache = JSON.parse(stored);
+            }
+        } catch (e) {
+            console.error('Failed to load credit hours cache:', e);
+        }
+    },
+
+    // Save cache to localStorage
+    saveCreditHoursCache() {
+        try {
+            localStorage.setItem('qh_credit_hours', JSON.stringify(this.creditHoursCache));
+        } catch (e) {
+            console.error('Failed to save credit hours cache:', e);
+        }
+    },
+
+    // Parse and cache credit hours from course cards
+    parseCreditHours() {
+        // Dashboard cards
+        document.querySelectorAll('.card').forEach(card => {
+            const parentLink = card.parentElement;
+            if (parentLink && parentLink.href) {
+                const courseIdMatch = parentLink.href.match(/\/course\/info\/(\d+)/);
+                if (courseIdMatch) {
+                    const courseId = courseIdMatch[1];
+                    const creditText = card.textContent.match(/Credits?\s*:\s*([\d.]+)/i);
+                    if (creditText) {
+                        this.creditHoursCache[courseId] = parseFloat(creditText[1]);
+                    }
+                }
+            }
+        });
+
+        // Results page cards
+        document.querySelectorAll('.md-card').forEach(card => {
+            const link = card.querySelector('a[href*="/student/course/gradebook/"]');
+            if (link) {
+                const courseIdMatch = link.href.match(/\/gradebook\/(\d+)/);
+                if (courseIdMatch) {
+                    const courseId = courseIdMatch[1];
+                    const creditText = card.textContent.match(/Credit Hours?\s*:\s*([\d.]+)/i);
+                    if (creditText) {
+                        this.creditHoursCache[courseId] = parseFloat(creditText[1]);
+                    }
+                }
+            }
+        });
+
+        // Save to localStorage after parsing
+        this.saveCreditHoursCache();
+    },
+
     async fetchGradebookData(courseId) {
         try {
             const response = await fetch(`https://qalam.nust.edu.pk/student/course/gradebook/${courseId}`);
             const html = await response.text();
             const parser = new DOMParser();
             const doc = parser.parseFromString(html, 'text/html');
+
+            // Check for lab component by looking for course section identifiers
+            // Look for any text containing course code patterns like "CS-333-...-A-Lab)" or "...-Lecture)"
+            const allLinks = doc.querySelectorAll('a');
+            let hasLabCategories = false;
+            let foundCourseLinks = [];
+            
+            allLinks.forEach(link => {
+                const text = link.textContent.trim();
+                // Look for patterns like "CS-333-Fall-25-SEECS/BSDS/2023F-A-Lab)" or similar
+                if (text.match(/\([A-Z]{2,4}-\d{3}.*?-(Lab|Lecture)\)/i)) {
+                    foundCourseLinks.push(text);
+                    if (text.toLowerCase().includes('-lab)')) {
+                        hasLabCategories = true;
+                    }
+                }
+            });
+            
+            console.log(`🔍 Course ${courseId}: Found ${foundCourseLinks.length} course section links, hasLab: ${hasLabCategories}`);
+            if (foundCourseLinks.length > 0) {
+                console.log(`   Course sections:`, foundCourseLinks);
+            }
 
             const parentRows = doc.querySelectorAll('.table-parent-row');
 
@@ -16,8 +98,6 @@ const ResultsModule = {
             let labObtainedMarks = 0;
             let labClassAvgMarks = 0;
             let labMaxMarks = 0;
-
-            let hasLabCategories = false;
 
             parentRows.forEach(row => {
                 const cells = row.querySelectorAll('td');
@@ -36,10 +116,8 @@ const ResultsModule = {
 
                 const studentPercentage = QalamHelper.parseNumber(cells[1].textContent);
 
+                // Still check category name to determine if it's a lab category (for accumulation)
                 const isLab = categoryName.toLowerCase().includes('lab');
-                if (isLab) {
-                    hasLabCategories = true;
-                }
 
                 if (weight > 0) {
                     if (isLab) {
@@ -107,12 +185,33 @@ const ResultsModule = {
                 }
             });
 
-            const hasLab = hasLabCategories;
-            const lectureWeight = hasLab ? 66.67 : 100;
-            const labWeight = hasLab ? 33.33 : 0;
+            // Use credit hours to determine lecture/lab split
+            const creditHours = this.creditHoursCache[courseId];
+            let lectureWeight, labWeight;
 
-            if (hasLab && (lectureMaxMarks === 0 || labMaxMarks === 0)) {
-                console.warn('⚠️ Only got one tab! Lecture or Lab data is missing.');
+            if (hasLabCategories && creditHours) {
+                // Lab is always 1 credit hour, lecture is (total - 1)
+                const lectureCreditHours = creditHours - 1;
+                const labCreditHours = 1;
+                
+                lectureWeight = (lectureCreditHours / creditHours) * 100;
+                labWeight = (labCreditHours / creditHours) * 100;
+                
+                console.log(`Course ${courseId}: ${creditHours} credits detected → Lecture: ${lectureWeight.toFixed(2)}%, Lab: ${labWeight.toFixed(2)}%`);
+            } else if (hasLabCategories) {
+                // Fallback if credit hours not found - use standard 2+1 (66.67/33.33)
+                lectureWeight = 66.67;
+                labWeight = 33.33;
+                console.log(`Course ${courseId}: Credit hours not found, using default 2+1 split (66.67% / 33.33%)`);
+            } else {
+                // Pure lecture course
+                lectureWeight = 100;
+                labWeight = 0;
+                console.log(`Course ${courseId}: Pure lecture course (100%)`);
+            }
+
+            if (hasLabCategories && (lectureMaxMarks === 0 || labMaxMarks === 0)) {
+                console.warn('Only got one tab! Lecture or Lab data is missing.');
             }
 
             const studentAggregate = (lectureObtainedMarks * lectureWeight / 100) + (labObtainedMarks * labWeight / 100);
@@ -122,7 +221,9 @@ const ResultsModule = {
 
             return {
                 studentAggregate,
-                classAggregate
+                classAggregate,
+                lectureWeight,
+                labWeight
             };
         } catch (error) {
             console.error('Failed to fetch gradebook data:', error);
@@ -131,6 +232,9 @@ const ResultsModule = {
     },
 
     async injectDashboardResults() {
+        // First, parse and cache credit hours from all cards
+        this.parseCreditHours();
+        
         const courseCards = document.querySelectorAll('.card');
         
         for (const card of courseCards) {
@@ -194,6 +298,9 @@ const ResultsModule = {
     },
 
     async injectResultsSummary() {
+        // First, parse and cache credit hours from all cards
+        this.parseCreditHours();
+        
         const courseCards = document.querySelectorAll('.md-card');
         
         // Continuously monitor and fix heights every 200ms
@@ -288,6 +395,9 @@ const ResultsModule = {
 
     init() {
         const page = QalamHelper.detectPage();
+        
+        // Always load credit hours cache from localStorage first
+        this.loadCreditHoursCache();
         
         if (page === 'results') {
             setTimeout(() => this.injectResultsSummary(), 1500);
