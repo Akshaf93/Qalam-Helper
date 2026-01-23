@@ -119,11 +119,41 @@ const AttendanceModule = {
         tabs.parentNode.insertBefore(summaryDiv, tabs);
     },
 
-    injectDashboardAttendance() {
+    async fetchAttendanceDetails(courseId) {
+        try {
+            const response = await fetch(`https://qalam.nust.edu.pk/student/course/attendance/${courseId}`);
+            const html = await response.text();
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            
+            let totalClasses = 0;
+            let attendedClasses = 0;
+            
+            const summaryItems = doc.querySelectorAll('.md-card-list li');
+            summaryItems.forEach(item => {
+                const text = item.textContent;
+                if (text.includes('Number of classes Conducted')) {
+                    const span = item.querySelector('span');
+                    if (span) totalClasses = QalamHelper.parseNumber(span.textContent);
+                }
+                if (text.includes('Number of classes Attended')) {
+                    const span = item.querySelector('span');
+                    if (span) attendedClasses = QalamHelper.parseNumber(span.textContent);
+                }
+            });
+            
+            return { totalClasses, attendedClasses };
+        } catch (e) {
+            console.error('Failed to fetch attendance:', e);
+            return null;
+        }
+    },
+
+    async injectDashboardAttendance() {
         // Find all course cards on dashboard
         const courseCards = document.querySelectorAll('.card');
         
-        courseCards.forEach(card => {
+        const promises = Array.from(courseCards).map(async (card) => {
             if (card.querySelector('.qh-attendance-widget')) return;
 
             const cardBody = card.querySelector('.card-body');
@@ -142,24 +172,36 @@ const AttendanceModule = {
             if (!attendanceDiv) {
                 return;
             }
+            const parentLink = card.parentElement;
+            if (!parentLink || !parentLink.href) return;
 
             const span = attendanceDiv.querySelector('span');
             if (!span) {
                 return;
             }
-
-            const attendancePercent = QalamHelper.parseNumber(span.textContent);
+            const courseIdMatch = parentLink.href.match(/\/course\/info\/(\d+)/);
+            if (!courseIdMatch) return;
             
-            // Parse credit hours to estimate total classes (16 weeks * credit hours)
-            let creditHours = 3; // Default fallback
+            const courseId = courseIdMatch[1];
+
+            // Parse credit hours for projection
+            let creditHours = 3;
             const creditMatch = cardBody.textContent.match(/Credits?\s*:\s*([\d.]+)/i);
             if (creditMatch) {
                 creditHours = parseFloat(creditMatch[1]);
             }
-            const estimatedTotal = Math.round(creditHours * 16);
-            const minRequired = Math.ceil(estimatedTotal * 0.75);
-            const maxAbsences = estimatedTotal - minRequired;
-            const currentAbsences = Math.round((estimatedTotal * (100 - attendancePercent)) / 100);
+
+            // Fetch exact data
+            const data = await this.fetchAttendanceDetails(courseId);
+            if (!data) return;
+            
+            // Calculate using exact absences + estimated semester length
+            // Use max() to handle cases where actual classes > estimated (e.g. makeup classes)
+            const estimatedSemesterTotal = Math.max(Math.round(creditHours * 16), data.totalClasses);
+            const minRequired = Math.ceil(estimatedSemesterTotal * 0.75);
+            const maxAbsences = estimatedSemesterTotal - minRequired;
+            
+            const currentAbsences = data.totalClasses - data.attendedClasses;
             const remainingAbsences = Math.max(0, maxAbsences - currentAbsences);
             
             const statusColor = remainingAbsences > 2 ? '#10b981' : 
@@ -186,6 +228,8 @@ const AttendanceModule = {
 
             cardBody.appendChild(widget);
         });
+
+        await Promise.all(promises);
     },
 
     injectAttendanceOverview() {
