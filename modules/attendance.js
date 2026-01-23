@@ -150,10 +150,13 @@ const AttendanceModule = {
 
             const attendancePercent = QalamHelper.parseNumber(span.textContent);
             
-            // We need to fetch the actual total classes to calculate remaining absences
-            // For now, estimate based on typical semester (48 classes for 2+1, 32 for 2+0)
-            // This will be updated when we have access to the detailed attendance page
-            const estimatedTotal = 48; // Conservative estimate
+            // Parse credit hours to estimate total classes (16 weeks * credit hours)
+            let creditHours = 3; // Default fallback
+            const creditMatch = cardBody.textContent.match(/Credits?\s*:\s*([\d.]+)/i);
+            if (creditMatch) {
+                creditHours = parseFloat(creditMatch[1]);
+            }
+            const estimatedTotal = Math.round(creditHours * 16);
             const minRequired = Math.ceil(estimatedTotal * 0.75);
             const maxAbsences = estimatedTotal - minRequired;
             const currentAbsences = Math.round((estimatedTotal * (100 - attendancePercent)) / 100);
@@ -228,8 +231,14 @@ const AttendanceModule = {
 
             const attendancePercent = QalamHelper.parseNumber(attendanceText.textContent);
             
-            // Estimate total classes (conservative)
-            const estimatedTotal = 48;
+            // Parse credit hours to estimate total classes
+            let creditHours = 3;
+            // Check for "Credit Hours" or "Credits"
+            const creditMatch = card.textContent.match(/(?:Credit Hours?|Credits?)\s*:\s*([\d.]+)/i);
+            if (creditMatch) {
+                creditHours = parseFloat(creditMatch[1]);
+            }
+            const estimatedTotal = Math.round(creditHours * 16);
             const minRequired = Math.ceil(estimatedTotal * 0.75);
             const maxAbsences = estimatedTotal - minRequired;
             const currentAbsences = Math.round((estimatedTotal * (100 - attendancePercent)) / 100);
@@ -261,36 +270,34 @@ const AttendanceModule = {
         }
 
         if (page === 'attendance-overview') {
-            // Continuously check and re-inject every 500ms
-            setInterval(() => {
-                // First remove any orphaned widgets
-                const allWidgets = document.querySelectorAll('.qh-attendance-widget');
-                allWidgets.forEach(widget => {
-                    const parentCard = widget.closest('.md-card');
-                    if (!parentCard) {
-                        widget.remove();
-                    }
-                });
+            // Initial injection
+            this.injectAttendanceOverview();
+
+            // Use MutationObserver instead of polling to reduce CPU usage
+            const observer = new MutationObserver((mutations) => {
+                let shouldUpdate = false;
                 
-                // Then check if any cards need widgets
-                const cards = document.querySelectorAll('.md-card');
-                let needsReinject = false;
-                
-                cards.forEach(card => {
-                    const content = card.querySelector('.md-card-content');
-                    const attendanceText = content?.querySelector('.uk-text-small');
-                    const hasWidget = content?.querySelector('.qh-attendance-widget');
-                    const hasAttendanceData = attendanceText && attendanceText.textContent.includes('Attendance:');
+                for (const mutation of mutations) {
+                    // Ignore mutations caused by our own widget injection
+                    const isOurWidget = Array.from(mutation.addedNodes).some(node => 
+                        node.nodeType === 1 && node.classList.contains('qh-attendance-widget')
+                    );
                     
-                    if (hasAttendanceData && !hasWidget) {
-                        needsReinject = true;
+                    if (!isOurWidget) {
+                        shouldUpdate = true;
+                        break;
                     }
-                });
-                
-                if (needsReinject) {
+                }
+
+                if (shouldUpdate) {
                     this.injectAttendanceOverview();
                 }
-            }, 500);
+            });
+
+            observer.observe(document.body, {
+                childList: true,
+                subtree: true
+            });
         }
 
         if (page === 'dashboard') {
